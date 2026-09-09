@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Message, ChatSession, RAGConfig, VoiceConfig } from '@/types/index';
 import { Header } from '@components/Header';
 import { ChatHistory } from '@components/ChatHistory';
-import { ChatWindow } from '@components/ChatWindow';
+import ChatWindow from "@components/ChatWindow";
 import { InputArea } from '@components/InputArea';
 import { RAGOptions } from '@components/RAGOptions';
 import { generateId } from '@utils/voice';
