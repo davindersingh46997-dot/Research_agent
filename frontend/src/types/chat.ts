@@ -16,3 +16,8 @@ export interface ChatResponse {
   session_id?: string;
   model: string;
 }
+
+export type ChatStreamEvent =
+  | { type: 'chunk'; content: string }
+  | { type: 'done'; session_id: string; model: string }
+  | { type: 'error'; detail: string };

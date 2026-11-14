@@ -8,7 +8,7 @@ The application uses a React + Vite chat frontend and a FastAPI backend. The bac
 
 1. The frontend posts `{ message, session_id }` to `/api/chat`.
 2. Vite proxies `/api/*` to the FastAPI server on port 8000.
-3. FastAPI calls the OpenRouter-compatible ChatOpenAI client and responds with `{ response, session_id, model }`.
-4. The frontend displays the response and configured model name.
+3. FastAPI streams OpenRouter tokens as Server-Sent Events; a final `done` event carries the session ID and model name.
+4. The frontend renders each token as it arrives and displays provider errors as chat alerts.
 
 `GET /api/chat/health` reports the configured model and whether an API key is present. Unit tests mock the model call; a live OpenRouter test is available by setting `RUN_OPENROUTER_INTEGRATION_TESTS=1`.

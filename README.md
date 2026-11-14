@@ -70,7 +70,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` in your browser. Vite forwards `/api/chat` requests to FastAPI, which calls the configured OpenRouter model and returns the response to the chat UI.
+Open `http://localhost:3000` in your browser. Vite forwards `/api/chat` requests to FastAPI, which streams OpenRouter response chunks to the chat UI using Server-Sent Events.
 
 ---
 

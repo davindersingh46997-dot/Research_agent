@@ -1,3 +1,4 @@
+import json
 import os
 import unittest
 
@@ -22,9 +23,17 @@ class OpenRouterIntegrationTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200, response.text)
-        body = response.json()
-        self.assertTrue(body["response"].strip())
-        self.assertEqual(body["model"], get_settings().openrouter_model)
+        events = [
+            json.loads(line.removeprefix("data: ").strip())
+            for line in response.text.splitlines()
+            if line.startswith("data: ")
+        ]
+        chunks = "".join(
+            event["content"] for event in events if event["type"] == "chunk"
+        )
+        completion = next(event for event in events if event["type"] == "done")
+        self.assertTrue(chunks.strip())
+        self.assertEqual(completion["model"], get_settings().openrouter_model)
 
 
 if __name__ == "__main__":

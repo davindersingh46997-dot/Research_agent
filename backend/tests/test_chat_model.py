@@ -4,7 +4,11 @@ from unittest.mock import patch
 from pydantic import SecretStr
 
 from backend.core.config import Settings
-from backend.models.chat_model import chat_with_model, create_chat_model
+from backend.models.chat_model import (
+    chat_with_model,
+    create_chat_model,
+    stream_chat_with_model,
+)
 
 
 class FakeResult:
@@ -20,6 +24,17 @@ class FakeModel:
     def invoke(self, prompt: str) -> FakeResult:
         self.prompt = prompt
         return FakeResult(self.content)
+
+
+class FakeStreamingModel:
+    def __init__(self, chunks: list[str]):
+        self.chunks = chunks
+        self.prompt = None
+
+    def stream(self, prompt: str):
+        self.prompt = prompt
+        for content in self.chunks:
+            yield FakeResult(content)
 
 
 class ChatModelTests(unittest.TestCase):
@@ -58,6 +73,14 @@ class ChatModelTests(unittest.TestCase):
 
         self.assertEqual(response, "The model response.")
         self.assertEqual(model.prompt, "Summarize this.")
+
+    def test_stream_chat_with_model_yields_text_chunks(self):
+        model = FakeStreamingModel(["First ", "second", "!"])
+
+        chunks = list(stream_chat_with_model("Stream this.", model=model))
+
+        self.assertEqual(chunks, ["First ", "second", "!"])
+        self.assertEqual(model.prompt, "Stream this.")
 
 
 if __name__ == "__main__":
