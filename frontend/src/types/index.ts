@@ -59,3 +59,5 @@ export interface ChatApiResponse {
   sources?: Source[];
   timestamp: Date;
 }
+
+export * from './chat';

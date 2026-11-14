@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 
-from backend.routes.search_route import router as research_router
+from backend.api.chat import router as chat_router
 
-app = FastAPI()
-
-app.include_router(research_router)
+app = FastAPI(title="Research Agent API")
+app.include_router(chat_router)
