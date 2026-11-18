@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { sendChatMessage } from '../services/chatApi';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { streamChatMessage } from '../services/chatApi';
 import type { ChatMessage } from '../types/chat';
 
 function createId() {
@@ -11,12 +11,17 @@ export function useChat() {
   const [sessionId, setSessionId] = useState<string>(createId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestController = useRef<AbortController | null>(null);
+
+  useEffect(() => () => requestController.current?.abort(), []);
 
   const sendMessage = useCallback(async (content: string) => {
     const text = content.trim();
-    if (!text || loading) return;
+    if (!text || requestController.current) return;
 
     setError(null);
+    const controller = new AbortController();
+    requestController.current = controller;
 
     const userMessage: ChatMessage = {
       id: createId(),
@@ -24,33 +29,71 @@ export function useChat() {
       content: text,
       timestamp: new Date(),
     };
+    const assistantId = createId();
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [
+      ...prev,
+      userMessage,
+      {
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date(),
+      },
+    ]);
     setLoading(true);
 
     try {
-      const data = await sendChatMessage(text, sessionId);
+      const data = await streamChatMessage(
+        text,
+        sessionId,
+        (chunk) => {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? { ...message, content: message.content + chunk }
+                : message,
+            ),
+          );
+        },
+        controller.signal,
+      );
 
-      const assistantMessage: ChatMessage = {
-        id: createId(),
-        role: 'assistant',
-        content: data.response,
-        timestamp: new Date(),
-        model: data.model,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (err: any) {
-      const message = err instanceof Error ? err.message : 'Failed to generate response from model.';
-      setError(message);
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === assistantId
+            ? { ...message, content: data.response, model: data.model }
+            : message,
+        ),
+      );
+      if (data.session_id) setSessionId(data.session_id);
+    } catch (err: unknown) {
+      if (!controller.signal.aborted) {
+        setMessages((prev) =>
+          prev.filter(
+            (message) => message.id !== assistantId || message.content.length > 0,
+          ),
+        );
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Failed to generate response from model.',
+        );
+      }
     } finally {
-      setLoading(false);
+      if (requestController.current === controller) {
+        requestController.current = null;
+        setLoading(false);
+      }
     }
-  }, [loading, sessionId]);
+  }, [sessionId]);
 
   const clearChat = useCallback(() => {
+    requestController.current?.abort();
+    requestController.current = null;
     setMessages([]);
     setError(null);
+    setLoading(false);
     setSessionId(createId());
   }, []);
 

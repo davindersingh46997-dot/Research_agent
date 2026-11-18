@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import patch
 
@@ -17,6 +18,14 @@ class BackendChatTests(unittest.TestCase):
             openrouter_model="provider/free-model",
         )
 
+    @staticmethod
+    def _events(response):
+        return [
+            json.loads(line.removeprefix("data: ").strip())
+            for line in response.text.splitlines()
+            if line.startswith("data: ")
+        ]
+
     def test_health_check_endpoint(self):
         with patch("backend.api.chat.get_settings", return_value=self.settings):
             response = self.client.get("/api/chat/health")
@@ -35,35 +44,47 @@ class BackendChatTests(unittest.TestCase):
         with patch(
             "backend.api.chat.get_settings", return_value=self.settings
         ), patch(
-            "backend.api.chat.chat_with_model",
-            return_value="Hello from OpenRouter!",
-        ) as mock_chat:
+            "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.stream_chat_with_model",
+            return_value=iter(["Hello ", "from OpenRouter!"]),
+        ) as mock_stream:
             response = self.client.post(
                 "/api/chat",
                 json={"message": "  Hello!  ", "session_id": "test-session-1"},
             )
 
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.headers["content-type"].startswith("text/event-stream"))
+        events = self._events(response)
         self.assertEqual(
-            response.json(),
-            {
-                "response": "Hello from OpenRouter!",
-                "session_id": "test-session-1",
-                "model": "provider/free-model",
-            },
+            events,
+            [
+                {"type": "chunk", "content": "Hello "},
+                {"type": "chunk", "content": "from OpenRouter!"},
+                {
+                    "type": "done",
+                    "session_id": "test-session-1",
+                    "model": "provider/free-model",
+                },
+            ],
         )
-        mock_chat.assert_called_once_with("Hello!")
+        mock_stream.assert_called_once()
 
     def test_chat_endpoint_generates_session_when_missing(self):
         with patch(
             "backend.api.chat.get_settings", return_value=self.settings
         ), patch(
-            "backend.api.chat.chat_with_model", return_value="A response."
+            "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.stream_chat_with_model", return_value=iter(["A response."])
         ):
             response = self.client.post("/api/chat", json={"message": "Hello"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["session_id"])
+        completion = self._events(response)[-1]
+        self.assertEqual(completion["type"], "done")
+        self.assertTrue(completion["session_id"])
 
     def test_chat_endpoint_empty_message_returns_400(self):
         response = self.client.post("/api/chat", json={"message": "   "})
@@ -73,11 +94,11 @@ class BackendChatTests(unittest.TestCase):
         unconfigured = Settings(_env_file=None)
         with patch(
             "backend.api.chat.get_settings", return_value=unconfigured
-        ), patch("backend.api.chat.chat_with_model") as mock_chat:
+        ), patch("backend.api.chat.create_chat_model") as mock_create_model:
             response = self.client.post("/api/chat", json={"message": "Hello"})
 
         self.assertEqual(response.status_code, 503)
-        mock_chat.assert_not_called()
+        mock_create_model.assert_not_called()
 
     def test_chat_endpoint_rejects_empty_api_key(self):
         blank_key = Settings(
@@ -87,11 +108,11 @@ class BackendChatTests(unittest.TestCase):
         )
         with patch(
             "backend.api.chat.get_settings", return_value=blank_key
-        ), patch("backend.api.chat.chat_with_model") as mock_chat:
+        ), patch("backend.api.chat.create_chat_model") as mock_create_model:
             response = self.client.post("/api/chat", json={"message": "Hello"})
 
         self.assertEqual(response.status_code, 503)
-        mock_chat.assert_not_called()
+        mock_create_model.assert_not_called()
 
     def test_chat_endpoint_explains_model_access_denial(self):
         provider_error = OpenAIError("model access denied")
@@ -99,12 +120,37 @@ class BackendChatTests(unittest.TestCase):
         with patch(
             "backend.api.chat.get_settings", return_value=self.settings
         ), patch(
-            "backend.api.chat.chat_with_model", side_effect=provider_error
+            "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.stream_chat_with_model", side_effect=provider_error
         ):
             response = self.client.post("/api/chat", json={"message": "Hello"})
 
-        self.assertEqual(response.status_code, 502)
-        self.assertIn("available for direct API applications", response.json()["detail"])
+        self.assertEqual(response.status_code, 200)
+        error_event = self._events(response)[0]
+        self.assertEqual(error_event["type"], "error")
+        self.assertIn("agentic harnesses", error_event["detail"])
+
+    def test_chat_endpoint_reports_stream_failure_after_partial_content(self):
+        class BrokenStream:
+            def __iter__(self):
+                yield "partial response"
+                raise ValueError("invalid provider chunk")
+
+        with patch(
+            "backend.api.chat.get_settings", return_value=self.settings
+        ), patch(
+            "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.stream_chat_with_model", return_value=BrokenStream()
+        ):
+            response = self.client.post("/api/chat", json={"message": "Hello"})
+
+        events = self._events(response)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(events[0], {"type": "chunk", "content": "partial response"})
+        self.assertEqual(events[1]["type"], "error")
+        self.assertNotIn("done", [event["type"] for event in events])
 
 
 if __name__ == "__main__":
