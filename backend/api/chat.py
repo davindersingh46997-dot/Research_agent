@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from backend.core.config import get_settings
 from backend.models.chat_model import create_chat_model, stream_chat_with_model
+from backend.services.search import SearchError
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,14 @@ def send_chat_message(request: ChatRequest) -> StreamingResponse:
             )
             # HTTP status cannot be changed after streaming headers are sent.
             yield _encode_event(ChatStreamError(detail=_openrouter_error_detail(exc)))
+            return
+        except SearchError as exc:
+            logger.warning("Tavily search failed: %s", exc)
+            yield _encode_event(
+                ChatStreamError(
+                    detail="Web search failed. Check TAVILY_API_KEY and try again."
+                )
+            )
             return
         except (TypeError, ValueError) as exc:
             logger.warning(

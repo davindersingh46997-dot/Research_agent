@@ -8,6 +8,7 @@ from pydantic import SecretStr
 
 from backend.main import app
 from backend.core.config import Settings
+from backend.services.search import SearchError
 
 
 class BackendChatTests(unittest.TestCase):
@@ -130,6 +131,22 @@ class BackendChatTests(unittest.TestCase):
         error_event = self._events(response)[0]
         self.assertEqual(error_event["type"], "error")
         self.assertIn("agentic harnesses", error_event["detail"])
+
+    def test_chat_endpoint_reports_web_search_failure(self):
+        with patch(
+            "backend.api.chat.get_settings", return_value=self.settings
+        ), patch(
+            "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.stream_chat_with_model",
+            side_effect=SearchError("Tavily unavailable"),
+        ):
+            response = self.client.post("/api/chat", json={"message": "Latest news?"})
+
+        self.assertEqual(response.status_code, 200)
+        error_event = self._events(response)[0]
+        self.assertEqual(error_event["type"], "error")
+        self.assertIn("TAVILY_API_KEY", error_event["detail"])
 
     def test_chat_endpoint_reports_stream_failure_after_partial_content(self):
         class BrokenStream:

@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     openrouter_model: str | None = Field(
         default=None, validation_alias="OPENROUTER_MODEL"
     )
+    tavily_api_key: SecretStr | None = Field(
+        default=None, validation_alias="TAVILY_API_KEY"
+    )
 
 @lru_cache
 def get_settings() -> Settings:

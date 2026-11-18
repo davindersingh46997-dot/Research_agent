@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
 
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from pydantic import SecretStr
 
 from backend.core.config import Settings
@@ -11,30 +12,41 @@ from backend.models.chat_model import (
 )
 
 
-class FakeResult:
-    def __init__(self, content: str):
-        self.content = content
-
-
 class FakeModel:
     def __init__(self, content: str):
         self.content = content
-        self.prompt = None
+        self.messages: list[BaseMessage] | None = None
 
-    def invoke(self, prompt: str) -> FakeResult:
-        self.prompt = prompt
-        return FakeResult(self.content)
+    def bind_tools(self, tools: list) -> "FakeModel":
+        self.tools = tools
+        return self
+
+    def invoke(self, messages: list[BaseMessage]) -> AIMessage:
+        self.messages = messages
+        return AIMessage(content=self.content)
 
 
-class FakeStreamingModel:
-    def __init__(self, chunks: list[str]):
-        self.chunks = chunks
-        self.prompt = None
+class FakeToolCallingModel(FakeModel):
+    def __init__(self):
+        super().__init__("The answer, based on the search results.")
+        self.invocations = 0
 
-    def stream(self, prompt: str):
-        self.prompt = prompt
-        for content in self.chunks:
-            yield FakeResult(content)
+    def invoke(self, messages: list[BaseMessage]) -> AIMessage:
+        self.messages = messages
+        self.invocations += 1
+        if any(isinstance(message, ToolMessage) for message in messages):
+            return AIMessage(content=self.content)
+        return AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "web_search",
+                    "args": {"query": "latest research"},
+                    "id": "search-1",
+                    "type": "tool_call",
+                }
+            ],
+        )
 
 
 class ChatModelTests(unittest.TestCase):
@@ -72,15 +84,56 @@ class ChatModelTests(unittest.TestCase):
         response = chat_with_model("Summarize this.", model=model)
 
         self.assertEqual(response, "The model response.")
-        self.assertEqual(model.prompt, "Summarize this.")
+        self.assertEqual(model.messages[-1].content, "Summarize this.")
 
-    def test_stream_chat_with_model_yields_text_chunks(self):
-        model = FakeStreamingModel(["First ", "second", "!"])
+    def test_stream_chat_with_model_yields_final_text(self):
+        model = FakeModel("The completed response.")
 
         chunks = list(stream_chat_with_model("Stream this.", model=model))
 
-        self.assertEqual(chunks, ["First ", "second", "!"])
-        self.assertEqual(model.prompt, "Stream this.")
+        self.assertEqual(chunks, ["The completed response."])
+        self.assertEqual(model.messages[-1].content, "Stream this.")
+
+    def test_chat_with_model_searches_only_when_model_calls_search_tool(self):
+        model = FakeToolCallingModel()
+        search_results = '[{"title":"Result", "url":"https://example.com"}]'
+
+        with patch(
+            "backend.models.chat_model.search_with_tavily",
+            return_value=search_results,
+        ) as mock_search:
+            response = chat_with_model("What is the latest research?", model=model)
+
+        self.assertEqual(response, "The answer, based on the search results.")
+        mock_search.assert_called_once_with("latest research")
+        self.assertEqual(model.invocations, 2)
+        self.assertTrue(
+            any(
+                isinstance(message, ToolMessage) and search_results in message.content
+                for message in model.messages
+            )
+        )
+
+    def test_stream_chat_with_model_uses_search_results_for_final_response(self):
+        model = FakeToolCallingModel()
+        search_results = '[{"title":"Result", "url":"https://example.com"}]'
+
+        with patch(
+            "backend.models.chat_model.search_with_tavily",
+            return_value=search_results,
+        ) as mock_search:
+            response = list(
+                stream_chat_with_model("What is the latest research?", model=model)
+            )
+
+        self.assertEqual(response, ["The answer, based on the search results."])
+        mock_search.assert_called_once_with("latest research")
+        self.assertTrue(
+            any(
+                isinstance(message, ToolMessage) and search_results in message.content
+                for message in model.messages
+            )
+        )
 
 
 if __name__ == "__main__":

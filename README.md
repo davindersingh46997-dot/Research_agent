@@ -1,6 +1,6 @@
 # Research Agent Chat Application
 
-An AI chat application featuring a FastAPI backend connected to an OpenRouter chat model and a React + TypeScript frontend.
+An AI chat application featuring a FastAPI backend connected to an OpenRouter chat model and a React + TypeScript frontend. The chat model can use Tavily web search through a LangGraph tool loop when a question needs current or externally sourced information.
 
 ---
 
@@ -46,6 +46,7 @@ In the project root, configure the OpenRouter credentials and model:
 ```env
 OPENROUTER_API_KEY=your_openrouter_api_key
 OPENROUTER_MODEL=your_openrouter_model_id
+TAVILY_API_KEY=your_tavily_api_key
 ```
 
 ### 2. Install Backend Dependencies and Start the API
@@ -82,4 +83,4 @@ Run backend unit tests:
 .\venv\Scripts\python.exe -m unittest discover -s backend/tests -v
 ```
 
-The unit tests mock the model call. To make a live OpenRouter smoke request, set `RUN_OPENROUTER_INTEGRATION_TESTS=1` before running the test suite.
+The unit tests mock model and search calls. Configure `TAVILY_API_KEY` to enable web search. To make a live OpenRouter smoke request, set `RUN_OPENROUTER_INTEGRATION_TESTS=1` before running the test suite.
