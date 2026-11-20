@@ -9,6 +9,7 @@ import {
     Loader2,
     MessageSquare,
     MessageSquarePlus,
+    Search,
     Sparkles,
     User,
     X,
@@ -23,7 +24,15 @@ const suggestions = [
 ];
 
 export function ChatWindow() {
-    const { messages, loading, error, sendMessage, clearChat, clearError } = useChat();
+    const {
+        messages,
+        loading,
+        activity,
+        error,
+        sendMessage,
+        clearChat,
+        clearError,
+    } = useChat();
     const [draft, setDraft] = useState("");
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -238,13 +247,29 @@ export function ChatWindow() {
                             ))}
 
                             {loading && (
-                                <div className="working-state" role="status" aria-live="polite">
+                                <div
+                                    className={`working-state${activity === "searching" ? " working-state-searching" : ""}`}
+                                    role="status"
+                                    aria-live="polite"
+                                >
                                     <div className="working-icon">
-                                        <Loader2 className="spin" size={17} />
+                                        {activity === "searching" ? (
+                                            <Search size={17} />
+                                        ) : (
+                                            <Loader2 className="spin" size={17} />
+                                        )}
                                     </div>
                                     <div>
-                                        <strong>OpenRouter model is generating a response...</strong>
-                                        <p>Processing the prompt through your configured model.</p>
+                                        <strong>
+                                            {activity === "searching"
+                                                ? "Searching the web..."
+                                                : "Working on your response..."}
+                                        </strong>
+                                        <p>
+                                            {activity === "searching"
+                                                ? "Finding current information to answer your question."
+                                                : "Processing the prompt through your configured model."}
+                                        </p>
                                     </div>
                                     <div className="working-bars">
                                         <i /><i /><i />

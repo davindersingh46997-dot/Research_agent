@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { streamChatMessage } from '../services/chatApi';
-import type { ChatMessage } from '../types/chat';
+import type { ChatActivity, ChatMessage } from '../types/chat';
 
 function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -10,6 +10,7 @@ export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string>(createId);
   const [loading, setLoading] = useState(false);
+  const [activity, setActivity] = useState<ChatActivity | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestController = useRef<AbortController | null>(null);
 
@@ -42,6 +43,7 @@ export function useChat() {
       },
     ]);
     setLoading(true);
+    setActivity('thinking');
 
     try {
       const data = await streamChatMessage(
@@ -57,6 +59,7 @@ export function useChat() {
           );
         },
         controller.signal,
+        setActivity,
       );
 
       setMessages((prev) =>
@@ -84,6 +87,7 @@ export function useChat() {
       if (requestController.current === controller) {
         requestController.current = null;
         setLoading(false);
+        setActivity(null);
       }
     }
   }, [sessionId]);
@@ -94,6 +98,7 @@ export function useChat() {
     setMessages([]);
     setError(null);
     setLoading(false);
+    setActivity(null);
     setSessionId(createId());
   }, []);
 
@@ -105,6 +110,7 @@ export function useChat() {
     messages,
     sessionId,
     loading,
+    activity,
     error,
     sendMessage,
     clearChat,

@@ -1,4 +1,9 @@
-import type { ChatRequest, ChatResponse, ChatStreamEvent } from '../types/chat';
+import type {
+  ChatActivity,
+  ChatRequest,
+  ChatResponse,
+  ChatStreamEvent,
+} from '../types/chat';
 
 const API_BASE = '/api/chat';
 
@@ -27,6 +32,12 @@ function parseStreamEvent(frame: string): ChatStreamEvent | null {
     return { type: 'chunk', content: event.content };
   }
   if (
+    event.type === 'activity' &&
+    (event.activity === 'searching' || event.activity === 'thinking')
+  ) {
+    return { type: 'activity', activity: event.activity };
+  }
+  if (
     event.type === 'done' &&
     typeof event.session_id === 'string' &&
     typeof event.model === 'string'
@@ -45,6 +56,7 @@ export async function streamChatMessage(
   sessionId?: string,
   onChunk?: (content: string) => void,
   signal?: AbortSignal,
+  onActivity?: (activity: ChatActivity) => void,
 ): Promise<ChatResponse> {
   const payload: ChatRequest = {
     message: message.trim(),
@@ -87,6 +99,11 @@ export async function streamChatMessage(
       }
       responseText += event.content;
       onChunk?.(event.content);
+    } else if (event.type === 'activity') {
+      if (completion) {
+        throw new Error('Chat service sent activity after completing the response.');
+      }
+      onActivity?.(event.activity);
     } else if (event.type === 'error') {
       throw new Error(event.detail);
     } else {

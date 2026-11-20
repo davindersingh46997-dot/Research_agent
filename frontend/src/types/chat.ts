@@ -17,7 +17,10 @@ export interface ChatResponse {
   model: string;
 }
 
+export type ChatActivity = 'searching' | 'thinking';
+
 export type ChatStreamEvent =
   | { type: 'chunk'; content: string }
+  | { type: 'activity'; activity: ChatActivity }
   | { type: 'done'; session_id: string; model: string }
   | { type: 'error'; detail: string };

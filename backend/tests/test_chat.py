@@ -8,6 +8,7 @@ from pydantic import SecretStr
 
 from backend.main import app
 from backend.core.config import Settings
+from backend.models.chat_model import ChatActivity
 from backend.services.search import SearchError
 
 
@@ -86,6 +87,26 @@ class BackendChatTests(unittest.TestCase):
         completion = self._events(response)[-1]
         self.assertEqual(completion["type"], "done")
         self.assertTrue(completion["session_id"])
+
+    def test_chat_endpoint_streams_search_activity(self):
+        with patch(
+            "backend.api.chat.get_settings", return_value=self.settings
+        ), patch(
+            "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.stream_chat_with_model",
+            return_value=iter([ChatActivity("searching"), "Found it."]),
+        ):
+            response = self.client.post(
+                "/api/chat", json={"message": "What is happening today?"}
+            )
+
+        events = self._events(response)
+        self.assertEqual(events[0], {"type": "activity", "activity": "searching"})
+        self.assertEqual(events[1], {"type": "chunk", "content": "Found it."})
+        self.assertEqual(events[-1]["type"], "done")
+        self.assertTrue(events[-1]["session_id"])
+        self.assertEqual(events[-1]["model"], "provider/free-model")
 
     def test_chat_endpoint_empty_message_returns_400(self):
         response = self.client.post("/api/chat", json={"message": "   "})

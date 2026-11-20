@@ -1032,6 +1032,11 @@ button {
   background: var(--mint);
 }
 
+.working-state-searching .working-icon {
+  color: #3974a2;
+  background: #e9f2f8;
+}
+
 .working-state strong {
   color: #49584f;
   font-size: 10px;

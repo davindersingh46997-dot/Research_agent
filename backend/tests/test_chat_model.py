@@ -6,6 +6,7 @@ from pydantic import SecretStr
 
 from backend.core.config import Settings
 from backend.models.chat_model import (
+    ChatActivity,
     chat_with_model,
     create_chat_model,
     stream_chat_with_model,
@@ -126,7 +127,14 @@ class ChatModelTests(unittest.TestCase):
                 stream_chat_with_model("What is the latest research?", model=model)
             )
 
-        self.assertEqual(response, ["The answer, based on the search results."])
+        self.assertEqual(
+            response,
+            [
+                ChatActivity("searching"),
+                ChatActivity("thinking"),
+                "The answer, based on the search results.",
+            ],
+        )
         mock_search.assert_called_once_with("latest research")
         self.assertTrue(
             any(

@@ -12,6 +12,7 @@ A modern, responsive chat interface built with React, TypeScript, and Vite. It c
   - One-click copy for assistant responses.
   - Interactive starter prompt suggestions on the welcome screen.
   - Real-time animated loading state while the model generates responses.
+  - A live search icon and status while the agent looks up current web information.
   - Clear, user-friendly error banners with actionable guidance.
 - **Keyboard Controls**:
   - `Enter` to send message.

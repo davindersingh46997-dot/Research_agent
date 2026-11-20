@@ -9,7 +9,11 @@ from openai import OpenAIError
 from pydantic import BaseModel
 
 from backend.core.config import get_settings
-from backend.models.chat_model import create_chat_model, stream_chat_with_model
+from backend.models.chat_model import (
+    ChatActivity,
+    create_chat_model,
+    stream_chat_with_model,
+)
 from backend.services.search import SearchError
 
 logger = logging.getLogger(__name__)
@@ -25,6 +29,11 @@ class ChatRequest(BaseModel):
 class ChatStreamChunk(BaseModel):
     type: Literal["chunk"] = "chunk"
     content: str
+
+
+class ChatStreamActivity(BaseModel):
+    type: Literal["activity"] = "activity"
+    activity: Literal["searching", "thinking"]
 
 
 class ChatStreamComplete(BaseModel):
@@ -95,8 +104,13 @@ def send_chat_message(request: ChatRequest) -> StreamingResponse:
 
     def stream_response() -> Iterator[str]:
         try:
-            for content in stream_chat_with_model(message, model=chat_model):
-                yield _encode_event(ChatStreamChunk(content=content))
+            for event in stream_chat_with_model(message, model=chat_model):
+                if isinstance(event, ChatActivity):
+                    yield _encode_event(
+                        ChatStreamActivity(activity=event.activity)
+                    )
+                else:
+                    yield _encode_event(ChatStreamChunk(content=event))
         except OpenAIError as exc:
             status_code = getattr(exc, "status_code", None)
             logger.warning(
