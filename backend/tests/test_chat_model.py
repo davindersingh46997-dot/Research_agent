@@ -1,7 +1,10 @@
+import asyncio
 import unittest
 from unittest.mock import patch
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from langchain_core.runnables import RunnableConfig
 from pydantic import SecretStr
 
 from backend.core.config import Settings
@@ -26,6 +29,12 @@ class FakeModel:
     def invoke(self, messages: list[BaseMessage]) -> AIMessage:
         self.messages = messages
         return AIMessage(content=self.content)
+
+    async def ainvoke(
+        self, messages: list[BaseMessage], config: RunnableConfig | None = None
+    ) -> AIMessage:
+        _ = config
+        return self.invoke(messages)
 
 
 class FakeToolCallingModel(FakeModel):
@@ -91,10 +100,22 @@ class ChatModelTests(unittest.TestCase):
     def test_stream_chat_with_model_yields_final_text(self):
         model = FakeModel("The completed response.")
 
-        chunks = list(stream_chat_with_model("Stream this.", model=model))
+        chunks = asyncio.run(_collect_stream("Stream this.", model=model))
 
         self.assertEqual(chunks, ["The completed response."])
         self.assertEqual(model.messages[-1].content, "Stream this.")
+
+    def test_stream_chat_with_model_yields_incremental_chunks(self):
+        class StreamingFakeModel(FakeListChatModel):
+            def bind_tools(self, tools):
+                _ = tools
+                return self
+
+        model = StreamingFakeModel(responses=["Chunked response."])
+
+        events = asyncio.run(_collect_stream("What is LangGraph?", model=model))
+
+        self.assertEqual(events, list("Chunked response."))
 
     def test_planning_is_skipped_for_simple_requests(self):
         self.assertFalse(_requires_planning("What is LangGraph?"))
@@ -118,8 +139,8 @@ class ChatModelTests(unittest.TestCase):
                 return AIMessage(content=self.content)
 
         model = FakePlanningModel()
-        events = list(
-            stream_chat_with_model(
+        events = asyncio.run(
+            _collect_stream(
                 "Compare two database designs and recommend the best fit.",
                 model=model,
             )
@@ -159,8 +180,8 @@ class ChatModelTests(unittest.TestCase):
             "backend.models.chat_model.search_with_tavily",
             return_value=search_results,
         ) as mock_search:
-            response = list(
-                stream_chat_with_model("What is the latest research?", model=model)
+            response = asyncio.run(
+                _collect_stream("What is the latest research?", model=model)
             )
 
         self.assertEqual(
@@ -178,6 +199,48 @@ class ChatModelTests(unittest.TestCase):
                 for message in model.messages
             )
         )
+
+    def test_stream_cancellation_cancels_the_model_call(self):
+        class SlowModel(FakeModel):
+            def __init__(self):
+                super().__init__("The answer.")
+                self.started = asyncio.Event()
+                self.cancelled = False
+
+            async def ainvoke(
+                self,
+                messages: list[BaseMessage],
+                config: RunnableConfig | None = None,
+            ) -> AIMessage:
+                _ = messages, config
+                self.started.set()
+                try:
+                    await asyncio.Future()
+                except asyncio.CancelledError:
+                    self.cancelled = True
+                    raise
+
+        async def run():
+            model = SlowModel()
+
+            async def consume():
+                async for _ in stream_chat_with_model(
+                    "What is LangGraph?", model=model
+                ):
+                    pass
+
+            task = asyncio.create_task(consume())
+            await asyncio.wait_for(model.started.wait(), timeout=5)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertTrue(model.cancelled)
+
+        asyncio.run(run())
+
+
+async def _collect_stream(prompt: str, model: FakeModel):
+    return [event async for event in stream_chat_with_model(prompt, model=model)]
 
 
 if __name__ == "__main__":

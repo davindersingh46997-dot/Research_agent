@@ -1,12 +1,13 @@
+from contextlib import aclosing
 import re
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, tool
 from langchain_openai import ChatOpenAI
-from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -51,9 +52,17 @@ def web_search(query: str) -> str:
 class _BoundChatModel(Protocol):
     def invoke(self, messages: list[BaseMessage]) -> BaseMessage: ...
 
+    async def ainvoke(
+        self, messages: list[BaseMessage], config: RunnableConfig | None = None
+    ) -> BaseMessage: ...
+
 
 class _ChatModel(Protocol):
     def invoke(self, messages: list[BaseMessage]) -> BaseMessage: ...
+
+    async def ainvoke(
+        self, messages: list[BaseMessage], config: RunnableConfig | None = None
+    ) -> BaseMessage: ...
 
     def bind_tools(self, tools: list[BaseTool]) -> _BoundChatModel: ...
 
@@ -86,59 +95,61 @@ def chat_with_model(prompt: str, model: _ChatModel | None = None) -> str:
     return response
 
 
-def stream_chat_with_model(
+async def stream_chat_with_model(
     prompt: str, model: _ChatModel | None = None
-) -> Iterator[str | ChatActivity]:
+) -> AsyncIterator[str | ChatActivity]:
     chat_model = model if model is not None else create_chat_model()
-    graph = _create_chat_graph(chat_model)
+    if _requires_planning(prompt):
+        yield ChatActivity("planning")
+    graph = _create_chat_graph(chat_model, async_nodes=True)
     yielded_response = False
     streamed_node_text = False
-    for mode, data in graph.stream(
-        {"messages": _initial_messages(prompt)},
-        stream_mode=["messages", "updates", "custom"],
-    ):
-        if mode == "custom":
-            if data == {"activity": "planning"}:
-                yield ChatActivity("planning")
-        elif mode == "messages":
-            message, metadata = data
-            if metadata.get("langgraph_node") != "assistant":
-                continue
-            if getattr(message, "tool_call_chunks", None) or getattr(
-                message, "tool_calls", None
-            ):
-                continue
-            text = _get_text(message)
-            if not isinstance(text, str):
-                raise TypeError("The chat model returned a non-text stream chunk.")
-            if text:
-                yielded_response = True
-                streamed_node_text = True
-                yield text
-        elif mode == "updates":
-            assistant_update = data.get("assistant")
-            if assistant_update is not None:
-                message = assistant_update["messages"][-1]
-                tool_calls = getattr(message, "tool_calls", None) or []
-                has_tool_calls = bool(tool_calls)
-                if any(call.get("name") == "web_search" for call in tool_calls):
-                    yield ChatActivity("searching")
-            else:
-                has_tool_calls = False
-
-            if "tools" in data:
-                yield ChatActivity("thinking")
-
-            if assistant_update is None:
-                continue
-            if not has_tool_calls and not streamed_node_text:
+    async with aclosing(
+        graph.astream(
+            {"messages": _initial_messages(prompt)},
+            stream_mode=["messages", "updates"],
+        )
+    ) as graph_events:
+        async for mode, data in graph_events:
+            if mode == "messages":
+                message, metadata = data
+                if metadata.get("langgraph_node") != "assistant":
+                    continue
+                if getattr(message, "tool_call_chunks", None) or getattr(
+                    message, "tool_calls", None
+                ):
+                    continue
                 text = _get_text(message)
                 if not isinstance(text, str):
-                    raise TypeError("The chat model returned a non-text response.")
+                    raise TypeError("The chat model returned a non-text stream chunk.")
                 if text:
                     yielded_response = True
+                    streamed_node_text = True
                     yield text
-            streamed_node_text = False
+            elif mode == "updates":
+                assistant_update = data.get("assistant")
+                if assistant_update is not None:
+                    message = assistant_update["messages"][-1]
+                    tool_calls = getattr(message, "tool_calls", None) or []
+                    has_tool_calls = bool(tool_calls)
+                    if any(call.get("name") == "web_search" for call in tool_calls):
+                        yield ChatActivity("searching")
+                else:
+                    has_tool_calls = False
+
+                if "tools" in data:
+                    yield ChatActivity("thinking")
+
+                if assistant_update is None:
+                    continue
+                if not has_tool_calls and not streamed_node_text:
+                    text = _get_text(message)
+                    if not isinstance(text, str):
+                        raise TypeError("The chat model returned a non-text response.")
+                    if text:
+                        yielded_response = True
+                        yield text
+                streamed_node_text = False
     if not yielded_response:
         raise TypeError("The chat model returned no text response.")
 
@@ -150,7 +161,7 @@ def _initial_messages(prompt: str) -> list[BaseMessage]:
     ]
 
 
-def _create_chat_graph(model: _ChatModel):
+def _create_chat_graph(model: _ChatModel, *, async_nodes: bool = False):
     tool_model = model.bind_tools([web_search])
 
     def route_initial_task(state: AgentState) -> str:
@@ -159,23 +170,22 @@ def _create_chat_graph(model: _ChatModel):
             raise TypeError("The chat model received a non-text user prompt.")
         return "planner" if _requires_planning(prompt) else "assistant"
 
-    def create_plan(state: AgentState) -> dict[str, str]:
-        get_stream_writer()({"activity": "planning"})
+    def create_plan_messages(state: AgentState) -> list[BaseMessage]:
         prompt = _get_text(state["messages"][-1])
         if not isinstance(prompt, str):
             raise TypeError("The chat model received a non-text user prompt.")
-        result = model.invoke(
-            [
-                SystemMessage(content=_PLAN_PROMPT),
-                HumanMessage(content=prompt),
-            ]
-        )
+        return [
+            SystemMessage(content=_PLAN_PROMPT),
+            HumanMessage(content=prompt),
+        ]
+
+    def extract_plan(result: BaseMessage) -> dict[str, str]:
         plan = _get_text(result)
         if not isinstance(plan, str) or not plan.strip():
             raise TypeError("The chat model returned an invalid task outline.")
         return {"plan": plan}
 
-    def call_model(state: AgentState) -> dict[str, list[BaseMessage]]:
+    def messages_with_plan(state: AgentState) -> list[BaseMessage]:
         messages = state["messages"]
         if state.get("plan"):
             messages = [
@@ -189,7 +199,31 @@ def _create_chat_graph(model: _ChatModel):
                 ),
                 *messages[1:],
             ]
-        return {"messages": [tool_model.invoke(messages)]}
+        return messages
+
+    if async_nodes:
+
+        async def create_plan(state: AgentState) -> dict[str, str]:
+            result = await model.ainvoke(create_plan_messages(state))
+            return extract_plan(result)
+
+        async def call_model(
+            state: AgentState, config: RunnableConfig
+        ) -> dict[str, list[BaseMessage]]:
+            return {
+                "messages": [
+                    await tool_model.ainvoke(messages_with_plan(state), config=config)
+                ]
+            }
+
+    else:
+
+        def create_plan(state: AgentState) -> dict[str, str]:
+            result = model.invoke(create_plan_messages(state))
+            return extract_plan(result)
+
+        def call_model(state: AgentState) -> dict[str, list[BaseMessage]]:
+            return {"messages": [tool_model.invoke(messages_with_plan(state))]}
 
     def route_after_model(state: AgentState) -> str:
         last_message = state["messages"][-1]

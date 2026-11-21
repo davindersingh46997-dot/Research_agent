@@ -29,6 +29,16 @@ class BackendChatTests(unittest.TestCase):
             if line.startswith("data: ")
         ]
 
+    @staticmethod
+    async def _stream_events(events):
+        for event in events:
+            yield event
+
+    @staticmethod
+    async def _stream_error(error):
+        raise error
+        yield ""
+
     def test_health_check_endpoint(self):
         with patch("backend.api.chat.get_settings", return_value=self.settings):
             response = self.client.get("/api/chat/health")
@@ -52,7 +62,7 @@ class BackendChatTests(unittest.TestCase):
             "backend.api.chat.is_research_question", return_value=True
         ), patch(
             "backend.api.chat.stream_chat_with_model",
-            return_value=iter(["Hello ", "from OpenRouter!"]),
+            return_value=self._stream_events(["Hello ", "from OpenRouter!"]),
         ) as mock_stream:
             response = self.client.post(
                 "/api/chat",
@@ -84,7 +94,8 @@ class BackendChatTests(unittest.TestCase):
         ), patch(
             "backend.api.chat.is_research_question", return_value=True
         ), patch(
-            "backend.api.chat.stream_chat_with_model", return_value=iter(["A response."])
+            "backend.api.chat.stream_chat_with_model",
+            return_value=self._stream_events(["A response."]),
         ):
             response = self.client.post("/api/chat", json={"message": "Hello"})
 
@@ -102,7 +113,7 @@ class BackendChatTests(unittest.TestCase):
             "backend.api.chat.is_research_question", return_value=True
         ), patch(
             "backend.api.chat.stream_chat_with_model",
-            return_value=iter(
+            return_value=self._stream_events(
                 [
                     ChatActivity("planning"),
                     ChatActivity("searching"),
@@ -196,7 +207,8 @@ class BackendChatTests(unittest.TestCase):
         ), patch(
             "backend.api.chat.is_research_question", return_value=True
         ), patch(
-            "backend.api.chat.stream_chat_with_model", side_effect=provider_error
+            "backend.api.chat.stream_chat_with_model",
+            return_value=self._stream_error(provider_error),
         ):
             response = self.client.post("/api/chat", json={"message": "Hello"})
 
@@ -214,7 +226,7 @@ class BackendChatTests(unittest.TestCase):
             "backend.api.chat.is_research_question", return_value=True
         ), patch(
             "backend.api.chat.stream_chat_with_model",
-            side_effect=SearchError("Tavily unavailable"),
+            return_value=self._stream_error(SearchError("Tavily unavailable")),
         ):
             response = self.client.post("/api/chat", json={"message": "Latest news?"})
 
@@ -225,7 +237,7 @@ class BackendChatTests(unittest.TestCase):
 
     def test_chat_endpoint_reports_stream_failure_after_partial_content(self):
         class BrokenStream:
-            def __iter__(self):
+            async def __aiter__(self):
                 yield "partial response"
                 raise ValueError("invalid provider chunk")
 

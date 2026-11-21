@@ -14,4 +14,6 @@ The application uses a React + Vite chat frontend and a FastAPI backend. The bac
 
 Complex requests take an internal planning step in the LangGraph workflow. The stream reports only activity labels such as planning, reasoning, and web search; it does not send the private outline or reasoning text to the UI.
 
+The composer switches to a **Stop generating** control while a response is in progress. Stopping aborts the request stream, cancels the async LangGraph model call, and keeps any response text already received.
+
 `GET /api/chat/health` reports the configured model and whether an API key is present. Unit tests mock the model call; a live OpenRouter test is available by setting `RUN_OPENROUTER_INTEGRATION_TESTS=1`.

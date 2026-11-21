@@ -12,6 +12,7 @@ import {
     MessageSquarePlus,
     Search,
     Sparkles,
+    Square,
     User,
     X,
 } from "lucide-react";
@@ -35,6 +36,7 @@ export function ChatWindow() {
         activity,
         error,
         sendMessage,
+        stopGeneration,
         clearChat,
         clearError,
     } = useChat();
@@ -366,11 +368,17 @@ export function ChatWindow() {
                                 <span className="keyboard-hint">Enter to send · Shift + Enter for new line</span>
                                 <button
                                     className="send-button"
-                                    type="submit"
-                                    disabled={!draft.trim() || loading}
-                                    aria-label="Send message"
+                                    type={loading ? "button" : "submit"}
+                                    onClick={loading ? stopGeneration : undefined}
+                                    disabled={!loading && !draft.trim()}
+                                    aria-label={loading ? "Stop generating" : "Send message"}
+                                    title={loading ? "Stop generating" : "Send message"}
                                 >
-                                    <ArrowUpRight size={19} />
+                                    {loading ? (
+                                        <Square size={14} fill="currentColor" />
+                                    ) : (
+                                        <ArrowUpRight size={19} />
+                                    )}
                                 </button>
                             </div>
                         </div>

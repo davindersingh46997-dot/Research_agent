@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from typing import Literal
 from uuid import uuid4
 
@@ -122,9 +122,9 @@ async def send_chat_message(request: ChatRequest) -> StreamingResponse:
     session_id = request.session_id or str(uuid4())
     model_name = settings.openrouter_model.strip()
 
-    def stream_response() -> Iterator[str]:
+    async def stream_response() -> AsyncIterator[str]:
         try:
-            for event in stream_chat_with_model(message, model=chat_model):
+            async for event in stream_chat_with_model(message, model=chat_model):
                 if isinstance(event, ChatActivity):
                     yield _encode_event(
                         ChatStreamActivity(activity=event.activity)

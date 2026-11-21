@@ -71,7 +71,13 @@ export function useChat() {
       );
       if (data.session_id) setSessionId(data.session_id);
     } catch (err: unknown) {
-      if (!controller.signal.aborted) {
+      if (controller.signal.aborted) {
+        setMessages((prev) =>
+          prev.filter(
+            (message) => message.id !== assistantId || message.content.length > 0,
+          ),
+        );
+      } else {
         setMessages((prev) =>
           prev.filter(
             (message) => message.id !== assistantId || message.content.length > 0,
@@ -102,6 +108,10 @@ export function useChat() {
     setSessionId(createId());
   }, []);
 
+  const stopGeneration = useCallback(() => {
+    requestController.current?.abort();
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -113,6 +123,7 @@ export function useChat() {
     activity,
     error,
     sendMessage,
+    stopGeneration,
     clearChat,
     clearError,
   };
