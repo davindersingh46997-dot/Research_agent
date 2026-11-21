@@ -16,6 +16,10 @@ import {
 } from "lucide-react";
 import { useChat } from "../hooks/useChat";
 import type { ChatMessage } from "../types/chat";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 
 const suggestions = [
     "Explain quantum computing in simple terms with an example",
@@ -235,9 +239,39 @@ export function ChatWindow() {
 
                                                 <article className="report-card">
                                                     <section className="report-section report-summary">
-                                                        <p style={{ fontSize: "14px", lineHeight: "1.7" }}>
-                                                            {msg.content}
-                                                        </p>
+                                                        <div className="markdown-content">
+                                                            <ReactMarkdown
+                                                                remarkPlugins={[remarkGfm, remarkMath]}
+                                                                rehypePlugins={[rehypeKatex]}
+                                                                components={{
+                                                                    a: ({ children, ...props }) => (
+                                                                        <a {...props} target="_blank" rel="noopener noreferrer">
+                                                                            {children}
+                                                                        </a>
+                                                                    ),
+                                                                    img: ({ src, alt }) => (
+                                                                        <img
+                                                                            src={src}
+                                                                            alt={alt || "Response image"}
+                                                                            loading="lazy"
+                                                                            className="markdown-image"
+                                                                        />
+                                                                    ),
+                                                                    table: ({ children }) => (
+                                                                        <div className="markdown-table-wrap">
+                                                                            <table>{children}</table>
+                                                                        </div>
+                                                                    ),
+                                                                    code: ({ className, children, ...props }) => (
+                                                                        <code className={className} {...props}>
+                                                                            {children}
+                                                                        </code>
+                                                                    ),
+                                                                }}
+                                                            >
+                                                                {msg.content}
+                                                            </ReactMarkdown>
+                                                        </div>
                                                     </section>
                                                 </article>
                                             </div>
