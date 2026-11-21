@@ -5,10 +5,12 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from nemoguardrails.exceptions import LLMCallException
 from openai import OpenAIError
 from pydantic import BaseModel
 
 from backend.core.config import get_settings
+from backend.guardrails.research_scope import is_research_question
 from backend.models.chat_model import (
     ChatActivity,
     create_chat_model,
@@ -82,7 +84,7 @@ def chat_health() -> dict[str, str | bool]:
 
 
 @router.post("")
-def send_chat_message(request: ChatRequest) -> StreamingResponse:
+async def send_chat_message(request: ChatRequest) -> StreamingResponse:
     message = request.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
@@ -96,6 +98,24 @@ def send_chat_message(request: ChatRequest) -> StreamingResponse:
         raise HTTPException(
             status_code=503,
             detail="Configure OPENROUTER_API_KEY and OPENROUTER_MODEL to use chat.",
+        )
+
+    try:
+        is_allowed = await is_research_question(message)
+    except LLMCallException as exc:
+        logger.warning("NeMo input guardrail failed. Provider status=%s", exc.status)
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to validate this message right now. Please try again later.",
+        ) from exc
+
+    if not is_allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Only research and current-affairs questions are supported. "
+                "Personal or unrelated requests are not allowed."
+            ),
         )
 
     chat_model = create_chat_model()

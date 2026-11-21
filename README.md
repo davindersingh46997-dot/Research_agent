@@ -1,6 +1,6 @@
 # Research Agent Chat Application
 
-An AI chat application featuring a FastAPI backend connected to an OpenRouter chat model and a React + TypeScript frontend. The LangGraph agent creates a short internal outline for complex requests and uses Tavily web search when current or externally sourced information is needed. The UI shows high-level activity states, not the agent's private reasoning or outline.
+An AI chat application featuring a FastAPI backend connected to an OpenRouter chat model and a React + TypeScript frontend. NeMo Guardrails limits chat requests to research and current-affairs topics, while the LangGraph agent creates a short internal outline for complex requests and uses Tavily web search when current or externally sourced information is needed. The UI shows high-level activity states, not the agent's private reasoning or outline.
 
 ---
 
@@ -12,6 +12,7 @@ Research_agent/
 ├── backend/                   # FastAPI backend
 │   ├── api/
 │   │   └── chat.py            # Chat and health API routes
+│   ├── guardrails/            # NeMo Guardrails input-scope policy
 │   ├── core/
 │   │   └── config.py          # Pydantic settings loaded from the root .env
 │   ├── models/

@@ -8,8 +8,9 @@ The application uses a React + Vite chat frontend and a FastAPI backend. The bac
 
 1. The frontend posts `{ message, session_id }` to `/api/chat`.
 2. Vite proxies `/api/*` to the FastAPI server on port 8000.
-3. FastAPI streams OpenRouter tokens as Server-Sent Events; a final `done` event carries the session ID and model name.
-4. The frontend renders each token as it arrives and displays provider errors as chat alerts.
+3. FastAPI runs the message through the NeMo Guardrails input rail. Personal or unrelated requests are rejected before chat generation.
+4. Accepted requests stream OpenRouter tokens as Server-Sent Events; a final `done` event carries the session ID and model name.
+5. The frontend renders each token as it arrives and displays provider errors or rejected-input messages as chat alerts.
 
 Complex requests take an internal planning step in the LangGraph workflow. The stream reports only activity labels such as planning, reasoning, and web search; it does not send the private outline or reasoning text to the UI.
 

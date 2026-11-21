@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from nemoguardrails.exceptions import LLMCallException
 from openai import OpenAIError
 from pydantic import SecretStr
 
@@ -48,6 +49,8 @@ class BackendChatTests(unittest.TestCase):
         ), patch(
             "backend.api.chat.create_chat_model", return_value=object()
         ), patch(
+            "backend.api.chat.is_research_question", return_value=True
+        ), patch(
             "backend.api.chat.stream_chat_with_model",
             return_value=iter(["Hello ", "from OpenRouter!"]),
         ) as mock_stream:
@@ -79,6 +82,8 @@ class BackendChatTests(unittest.TestCase):
         ), patch(
             "backend.api.chat.create_chat_model", return_value=object()
         ), patch(
+            "backend.api.chat.is_research_question", return_value=True
+        ), patch(
             "backend.api.chat.stream_chat_with_model", return_value=iter(["A response."])
         ):
             response = self.client.post("/api/chat", json={"message": "Hello"})
@@ -93,6 +98,8 @@ class BackendChatTests(unittest.TestCase):
             "backend.api.chat.get_settings", return_value=self.settings
         ), patch(
             "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.is_research_question", return_value=True
         ), patch(
             "backend.api.chat.stream_chat_with_model",
             return_value=iter(
@@ -114,6 +121,42 @@ class BackendChatTests(unittest.TestCase):
         self.assertEqual(events[-1]["type"], "done")
         self.assertTrue(events[-1]["session_id"])
         self.assertEqual(events[-1]["model"], "provider/free-model")
+
+    def test_chat_endpoint_rejects_out_of_scope_question(self):
+        with patch(
+            "backend.api.chat.get_settings", return_value=self.settings
+        ), patch(
+            "backend.api.chat.create_chat_model"
+        ) as mock_create_model, patch(
+            "backend.api.chat.is_research_question", return_value=False
+        ), patch(
+            "backend.api.chat.stream_chat_with_model"
+        ) as mock_stream:
+            response = self.client.post(
+                "/api/chat", json={"message": "What should I do about my relationship?"}
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("research and current-affairs", response.json()["detail"])
+        mock_create_model.assert_not_called()
+        mock_stream.assert_not_called()
+
+    def test_chat_endpoint_fails_closed_when_guardrail_is_unavailable(self):
+        with patch(
+            "backend.api.chat.get_settings", return_value=self.settings
+        ), patch(
+            "backend.api.chat.is_research_question",
+            side_effect=LLMCallException("provider unavailable"),
+        ), patch(
+            "backend.api.chat.create_chat_model"
+        ) as mock_create_model:
+            response = self.client.post(
+                "/api/chat", json={"message": "What is new in climate research?"}
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("Unable to validate", response.json()["detail"])
+        mock_create_model.assert_not_called()
 
     def test_chat_endpoint_empty_message_returns_400(self):
         response = self.client.post("/api/chat", json={"message": "   "})
@@ -151,6 +194,8 @@ class BackendChatTests(unittest.TestCase):
         ), patch(
             "backend.api.chat.create_chat_model", return_value=object()
         ), patch(
+            "backend.api.chat.is_research_question", return_value=True
+        ), patch(
             "backend.api.chat.stream_chat_with_model", side_effect=provider_error
         ):
             response = self.client.post("/api/chat", json={"message": "Hello"})
@@ -165,6 +210,8 @@ class BackendChatTests(unittest.TestCase):
             "backend.api.chat.get_settings", return_value=self.settings
         ), patch(
             "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.is_research_question", return_value=True
         ), patch(
             "backend.api.chat.stream_chat_with_model",
             side_effect=SearchError("Tavily unavailable"),
@@ -186,6 +233,8 @@ class BackendChatTests(unittest.TestCase):
             "backend.api.chat.get_settings", return_value=self.settings
         ), patch(
             "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.is_research_question", return_value=True
         ), patch(
             "backend.api.chat.stream_chat_with_model", return_value=BrokenStream()
         ):
