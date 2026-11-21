@@ -9,6 +9,10 @@ class SearchError(RuntimeError):
     """Raised when a configured web search cannot return usable results."""
 
 
+class SearchSafetyError(SearchError):
+    """Raised when search results fail prompt-injection validation."""
+
+
 def search_with_tavily(query: str, model: TavilySearch | None = None) -> str:
     if model is None:
         settings = get_settings()

@@ -10,7 +10,7 @@ from pydantic import SecretStr
 from backend.main import app
 from backend.core.config import Settings
 from backend.models.chat_model import ChatActivity
-from backend.services.search import SearchError
+from backend.services.search import SearchError, SearchSafetyError
 
 
 class BackendChatTests(unittest.TestCase):
@@ -234,6 +234,48 @@ class BackendChatTests(unittest.TestCase):
         error_event = self._events(response)[0]
         self.assertEqual(error_event["type"], "error")
         self.assertIn("TAVILY_API_KEY", error_event["detail"])
+
+    def test_chat_endpoint_reports_unverified_search_content(self):
+        with patch(
+            "backend.api.chat.get_settings", return_value=self.settings
+        ), patch(
+            "backend.api.chat.is_research_question", return_value=True
+        ), patch(
+            "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.stream_chat_with_model",
+            return_value=self._stream_error(
+                SearchSafetyError("Prompt injection detected")
+            ),
+        ):
+            response = self.client.post(
+                "/api/chat", json={"message": "Summarize recent climate research."}
+            )
+
+        error_event = self._events(response)[0]
+        self.assertEqual(error_event["type"], "error")
+        self.assertIn("could not be verified", error_event["detail"])
+
+    def test_chat_endpoint_fails_closed_when_search_guardrail_is_unavailable(self):
+        with patch(
+            "backend.api.chat.get_settings", return_value=self.settings
+        ), patch(
+            "backend.api.chat.is_research_question", return_value=True
+        ), patch(
+            "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.stream_chat_with_model",
+            return_value=self._stream_error(
+                LLMCallException("Search content verification unavailable")
+            ),
+        ):
+            response = self.client.post(
+                "/api/chat", json={"message": "Summarize recent climate research."}
+            )
+
+        error_event = self._events(response)[0]
+        self.assertEqual(error_event["type"], "error")
+        self.assertIn("Unable to verify web search results", error_event["detail"])
 
     def test_chat_endpoint_reports_stream_failure_after_partial_content(self):
         class BrokenStream:

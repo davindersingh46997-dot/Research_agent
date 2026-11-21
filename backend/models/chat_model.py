@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import aclosing
 import re
 from collections.abc import AsyncIterator
@@ -12,7 +13,11 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from backend.core.config import get_settings
-from backend.services.search import search_with_tavily
+from backend.guardrails.research_scope import (
+    is_search_content_safe,
+    is_search_content_safe_sync,
+)
+from backend.services.search import SearchSafetyError, search_with_tavily
 
 
 _SYSTEM_PROMPT = """Answer the user's question accurately and directly. Use web search
@@ -46,7 +51,19 @@ class AgentState(MessagesState, total=False):
 @tool
 def web_search(query: str) -> str:
     """Search the web for current facts and return source URLs and page content."""
-    return search_with_tavily(query)
+    results = search_with_tavily(query)
+    if not is_search_content_safe_sync(results):
+        raise SearchSafetyError("Web search results failed prompt-injection checks.")
+    return results
+
+
+@tool("web_search")
+async def web_search_async(query: str) -> str:
+    """Search the web and validate results before they reach the assistant."""
+    results = await asyncio.to_thread(search_with_tavily, query)
+    if not await is_search_content_safe(results):
+        raise SearchSafetyError("Web search results failed prompt-injection checks.")
+    return results
 
 
 class _BoundChatModel(Protocol):
@@ -162,7 +179,8 @@ def _initial_messages(prompt: str) -> list[BaseMessage]:
 
 
 def _create_chat_graph(model: _ChatModel, *, async_nodes: bool = False):
-    tool_model = model.bind_tools([web_search])
+    search_tool = web_search_async if async_nodes else web_search
+    tool_model = model.bind_tools([search_tool])
 
     def route_initial_task(state: AgentState) -> str:
         prompt = _get_text(state["messages"][-1])
@@ -232,7 +250,7 @@ def _create_chat_graph(model: _ChatModel, *, async_nodes: bool = False):
     workflow = StateGraph(AgentState)
     workflow.add_node("planner", create_plan)
     workflow.add_node("assistant", call_model)
-    workflow.add_node("tools", ToolNode([web_search], handle_tool_errors=False))
+    workflow.add_node("tools", ToolNode([search_tool], handle_tool_errors=False))
     workflow.add_conditional_edges(
         START,
         route_initial_task,

@@ -16,7 +16,7 @@ from backend.models.chat_model import (
     create_chat_model,
     stream_chat_with_model,
 )
-from backend.services.search import SearchError
+from backend.services.search import SearchError, SearchSafetyError
 
 logger = logging.getLogger(__name__)
 
@@ -141,11 +141,30 @@ async def send_chat_message(request: ChatRequest) -> StreamingResponse:
             # HTTP status cannot be changed after streaming headers are sent.
             yield _encode_event(ChatStreamError(detail=_openrouter_error_detail(exc)))
             return
+        except SearchSafetyError:
+            logger.warning("Tavily results failed prompt-injection validation.")
+            yield _encode_event(
+                ChatStreamError(
+                    detail="Web search results could not be verified and were discarded."
+                )
+            )
+            return
         except SearchError as exc:
             logger.warning("Tavily search failed: %s", exc)
             yield _encode_event(
                 ChatStreamError(
                     detail="Web search failed. Check TAVILY_API_KEY and try again."
+                )
+            )
+            return
+        except LLMCallException as exc:
+            logger.warning(
+                "NeMo search-content guardrail failed. Provider status=%s",
+                exc.status,
+            )
+            yield _encode_event(
+                ChatStreamError(
+                    detail="Unable to verify web search results; no answer was generated."
                 )
             )
             return
