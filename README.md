@@ -1,6 +1,6 @@
 # Research Agent Chat Application
 
-An AI chat application featuring a FastAPI backend connected to an OpenRouter chat model and a React + TypeScript frontend. The chat model can use Tavily web search through a LangGraph tool loop when a question needs current or externally sourced information.
+An AI chat application featuring a FastAPI backend connected to an OpenRouter chat model and a React + TypeScript frontend. The LangGraph agent creates a short internal outline for complex requests and uses Tavily web search when current or externally sourced information is needed. The UI shows high-level activity states, not the agent's private reasoning or outline.
 
 ---
 

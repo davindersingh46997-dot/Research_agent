@@ -17,7 +17,7 @@ export interface ChatResponse {
   model: string;
 }
 
-export type ChatActivity = 'searching' | 'thinking';
+export type ChatActivity = 'planning' | 'searching' | 'thinking';
 
 export type ChatStreamEvent =
   | { type: 'chunk'; content: string }

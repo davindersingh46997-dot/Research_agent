@@ -6,6 +6,7 @@ import {
     Copy,
     Cpu,
     KeyRound,
+    ListChecks,
     Loader2,
     MessageSquare,
     MessageSquarePlus,
@@ -282,12 +283,14 @@ export function ChatWindow() {
 
                             {loading && (
                                 <div
-                                    className={`working-state${activity === "searching" ? " working-state-searching" : ""}`}
+                                    className={`working-state${activity ? ` working-state-${activity}` : ""}`}
                                     role="status"
                                     aria-live="polite"
                                 >
                                     <div className="working-icon">
-                                        {activity === "searching" ? (
+                                        {activity === "planning" ? (
+                                            <ListChecks size={17} />
+                                        ) : activity === "searching" ? (
                                             <Search size={17} />
                                         ) : (
                                             <Loader2 className="spin" size={17} />
@@ -295,14 +298,18 @@ export function ChatWindow() {
                                     </div>
                                     <div>
                                         <strong>
-                                            {activity === "searching"
-                                                ? "Searching the web..."
-                                                : "Working on your response..."}
+                                            {activity === "planning"
+                                                ? "Planning your response..."
+                                                : activity === "searching"
+                                                    ? "Searching the web..."
+                                                    : "Reasoning through your request..."}
                                         </strong>
                                         <p>
-                                            {activity === "searching"
-                                                ? "Finding current information to answer your question."
-                                                : "Processing the prompt through your configured model."}
+                                            {activity === "planning"
+                                                ? "Organizing the steps for this complex request."
+                                                : activity === "searching"
+                                                    ? "Finding current information to answer your question."
+                                                    : "Working through the response with your configured model."}
                                         </p>
                                     </div>
                                     <div className="working-bars">

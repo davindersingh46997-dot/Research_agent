@@ -7,6 +7,7 @@ from pydantic import SecretStr
 from backend.core.config import Settings
 from backend.models.chat_model import (
     ChatActivity,
+    _requires_planning,
     chat_with_model,
     create_chat_model,
     stream_chat_with_model,
@@ -94,6 +95,41 @@ class ChatModelTests(unittest.TestCase):
 
         self.assertEqual(chunks, ["The completed response."])
         self.assertEqual(model.messages[-1].content, "Stream this.")
+
+    def test_planning_is_skipped_for_simple_requests(self):
+        self.assertFalse(_requires_planning("What is LangGraph?"))
+
+    def test_planning_is_enabled_for_complex_requests(self):
+        self.assertTrue(_requires_planning("Compare two database designs."))
+        self.assertTrue(
+            _requires_planning("Build a small API and write tests for its routes.")
+        )
+
+    def test_stream_chat_with_model_emits_planning_state_without_plan_text(self):
+        class FakePlanningModel(FakeModel):
+            def __init__(self):
+                super().__init__("The completed response.")
+                self.invocations: list[list[BaseMessage]] = []
+
+            def invoke(self, messages: list[BaseMessage]) -> AIMessage:
+                self.invocations.append(messages)
+                if len(messages) == 2:
+                    return AIMessage(content="1. Compare options\n2. Recommend one")
+                return AIMessage(content=self.content)
+
+        model = FakePlanningModel()
+        events = list(
+            stream_chat_with_model(
+                "Compare two database designs and recommend the best fit.",
+                model=model,
+            )
+        )
+
+        self.assertEqual(
+            events, [ChatActivity("planning"), "The completed response."]
+        )
+        self.assertEqual(len(model.invocations), 2)
+        self.assertIn("Compare options", model.invocations[-1][1].content)
 
     def test_chat_with_model_searches_only_when_model_calls_search_tool(self):
         model = FakeToolCallingModel()

@@ -1190,6 +1190,11 @@ button {
   background: #e9f2f8;
 }
 
+.working-state-planning .working-icon {
+  color: #8a641f;
+  background: #fbf3df;
+}
+
 .working-state strong {
   color: #49584f;
   font-size: 10px;

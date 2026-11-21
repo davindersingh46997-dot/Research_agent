@@ -33,7 +33,7 @@ class ChatStreamChunk(BaseModel):
 
 class ChatStreamActivity(BaseModel):
     type: Literal["activity"] = "activity"
-    activity: Literal["searching", "thinking"]
+    activity: Literal["planning", "searching", "thinking"]
 
 
 class ChatStreamComplete(BaseModel):

@@ -95,15 +95,22 @@ class BackendChatTests(unittest.TestCase):
             "backend.api.chat.create_chat_model", return_value=object()
         ), patch(
             "backend.api.chat.stream_chat_with_model",
-            return_value=iter([ChatActivity("searching"), "Found it."]),
+            return_value=iter(
+                [
+                    ChatActivity("planning"),
+                    ChatActivity("searching"),
+                    "Found it.",
+                ]
+            ),
         ):
             response = self.client.post(
                 "/api/chat", json={"message": "What is happening today?"}
             )
 
         events = self._events(response)
-        self.assertEqual(events[0], {"type": "activity", "activity": "searching"})
-        self.assertEqual(events[1], {"type": "chunk", "content": "Found it."})
+        self.assertEqual(events[0], {"type": "activity", "activity": "planning"})
+        self.assertEqual(events[1], {"type": "activity", "activity": "searching"})
+        self.assertEqual(events[2], {"type": "chunk", "content": "Found it."})
         self.assertEqual(events[-1]["type"], "done")
         self.assertTrue(events[-1]["session_id"])
         self.assertEqual(events[-1]["model"], "provider/free-model")

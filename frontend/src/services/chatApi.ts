@@ -33,7 +33,9 @@ function parseStreamEvent(frame: string): ChatStreamEvent | null {
   }
   if (
     event.type === 'activity' &&
-    (event.activity === 'searching' || event.activity === 'thinking')
+    (event.activity === 'planning' ||
+      event.activity === 'searching' ||
+      event.activity === 'thinking')
   ) {
     return { type: 'activity', activity: event.activity };
   }
