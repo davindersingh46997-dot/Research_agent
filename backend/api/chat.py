@@ -10,6 +10,7 @@ from openai import OpenAIError
 from pydantic import BaseModel
 
 from backend.core.config import get_settings
+from backend.core.memory import ShortTermMemory
 from backend.guardrails.research_scope import is_research_question
 from backend.models.chat_model import (
     ChatActivity,
@@ -21,6 +22,7 @@ from backend.services.search import SearchError, SearchSafetyError
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+_chat_memory = ShortTermMemory()
 
 
 class ChatRequest(BaseModel):
@@ -123,13 +125,19 @@ async def send_chat_message(request: ChatRequest) -> StreamingResponse:
     model_name = settings.openrouter_model.strip()
 
     async def stream_response() -> AsyncIterator[str]:
+        response_parts: list[str] = []
         try:
-            async for event in stream_chat_with_model(message, model=chat_model):
+            async for event in stream_chat_with_model(
+                message,
+                model=chat_model,
+                history=_chat_memory.get_messages(session_id),
+            ):
                 if isinstance(event, ChatActivity):
                     yield _encode_event(
                         ChatStreamActivity(activity=event.activity)
                     )
                 else:
+                    response_parts.append(event)
                     yield _encode_event(ChatStreamChunk(content=event))
         except OpenAIError as exc:
             status_code = getattr(exc, "status_code", None)
@@ -180,6 +188,7 @@ async def send_chat_message(request: ChatRequest) -> StreamingResponse:
             )
             return
 
+        _chat_memory.add_exchange(session_id, message, "".join(response_parts))
         yield _encode_event(
             ChatStreamComplete(session_id=session_id, model=model_name)
         )

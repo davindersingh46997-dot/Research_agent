@@ -14,7 +14,8 @@ Research_agent/
 │   │   └── chat.py            # Chat and health API routes
 │   ├── guardrails/            # NeMo Guardrails input-scope policy
 │   ├── core/
-│   │   └── config.py          # Pydantic settings loaded from the root .env
+│   │   ├── config.py          # Pydantic settings loaded from the root .env
+│   │   └── memory.py          # Per-session short-term chat memory
 │   ├── models/
 │   │   ├── __init__.py
 │   │   └── chat_model.py      # OpenRouter model integration
@@ -84,4 +85,4 @@ Run backend unit tests:
 .\venv\Scripts\python.exe -m unittest discover -s backend/tests -v
 ```
 
-The unit tests mock model and search calls. Configure `TAVILY_API_KEY` to enable web search. To make a live OpenRouter smoke request, set `RUN_OPENROUTER_INTEGRATION_TESTS=1` before running the test suite.
+The backend keeps the last five user/assistant messages per chat session in process memory and includes them in subsequent model requests. This short-term memory is cleared when the backend restarts. The unit tests mock model and search calls. Configure `TAVILY_API_KEY` to enable web search. To make a live OpenRouter smoke request, set `RUN_OPENROUTER_INTEGRATION_TESTS=1` before running the test suite.

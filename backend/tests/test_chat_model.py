@@ -2,7 +2,7 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.runnables import RunnableConfig
 from pydantic import SecretStr
@@ -97,6 +97,27 @@ class ChatModelTests(unittest.TestCase):
 
         self.assertEqual(response, "The model response.")
         self.assertEqual(model.messages[-1].content, "Summarize this.")
+
+    def test_chat_with_model_includes_prior_messages_before_current_prompt(self):
+        model = FakeModel("The model response.")
+        history = [
+            HumanMessage(content="Earlier question."),
+            AIMessage(content="Earlier answer."),
+        ]
+
+        chat_with_model("Follow-up question.", model=model, history=history)
+
+        self.assertEqual(
+            [
+                (type(message), message.content)
+                for message in model.messages[1:]
+            ],
+            [
+                (HumanMessage, "Earlier question."),
+                (AIMessage, "Earlier answer."),
+                (HumanMessage, "Follow-up question."),
+            ],
+        )
 
     def test_stream_chat_with_model_yields_final_text(self):
         model = FakeModel("The completed response.")

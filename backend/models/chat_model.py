@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import aclosing
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -102,10 +102,14 @@ def create_chat_model() -> ChatOpenAI:
     )
 
 
-def chat_with_model(prompt: str, model: _ChatModel | None = None) -> str:
+def chat_with_model(
+    prompt: str,
+    model: _ChatModel | None = None,
+    history: Sequence[BaseMessage] = (),
+) -> str:
     chat_model = model if model is not None else create_chat_model()
     graph = _create_chat_graph(chat_model)
-    result = graph.invoke({"messages": _initial_messages(prompt)})
+    result = graph.invoke({"messages": _initial_messages(prompt, history)})
     response = _get_text(result["messages"][-1])
     if not isinstance(response, str):
         raise TypeError("The chat model returned a non-text response.")
@@ -113,7 +117,9 @@ def chat_with_model(prompt: str, model: _ChatModel | None = None) -> str:
 
 
 async def stream_chat_with_model(
-    prompt: str, model: _ChatModel | None = None
+    prompt: str,
+    model: _ChatModel | None = None,
+    history: Sequence[BaseMessage] = (),
 ) -> AsyncIterator[str | ChatActivity]:
     chat_model = model if model is not None else create_chat_model()
     if _requires_planning(prompt):
@@ -123,7 +129,7 @@ async def stream_chat_with_model(
     streamed_node_text = False
     async with aclosing(
         graph.astream(
-            {"messages": _initial_messages(prompt)},
+            {"messages": _initial_messages(prompt, history)},
             stream_mode=["messages", "updates"],
         )
     ) as graph_events:
@@ -171,9 +177,12 @@ async def stream_chat_with_model(
         raise TypeError("The chat model returned no text response.")
 
 
-def _initial_messages(prompt: str) -> list[BaseMessage]:
+def _initial_messages(
+    prompt: str, history: Sequence[BaseMessage] = ()
+) -> list[BaseMessage]:
     return [
         SystemMessage(content=_SYSTEM_PROMPT),
+        *history,
         HumanMessage(content=prompt),
     ]
 

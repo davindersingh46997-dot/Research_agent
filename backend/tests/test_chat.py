@@ -9,6 +9,7 @@ from pydantic import SecretStr
 
 from backend.main import app
 from backend.core.config import Settings
+from backend.core.memory import ShortTermMemory
 from backend.models.chat_model import ChatActivity
 from backend.services.search import SearchError, SearchSafetyError
 
@@ -103,6 +104,44 @@ class BackendChatTests(unittest.TestCase):
         completion = self._events(response)[-1]
         self.assertEqual(completion["type"], "done")
         self.assertTrue(completion["session_id"])
+
+    def test_chat_endpoint_reuses_session_memory(self):
+        memory = ShortTermMemory()
+        observed_histories = []
+
+        def stream_with_history(message, *, model, history):
+            _ = message, model
+            observed_histories.append(list(history))
+            return self._stream_events([f"Reply {len(observed_histories)}"])
+
+        with patch(
+            "backend.api.chat._chat_memory", memory
+        ), patch(
+            "backend.api.chat.get_settings", return_value=self.settings
+        ), patch(
+            "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.is_research_question", return_value=True
+        ), patch(
+            "backend.api.chat.stream_chat_with_model",
+            side_effect=stream_with_history,
+        ):
+            for prompt in ("First question", "Follow-up"):
+                response = self.client.post(
+                    "/api/chat",
+                    json={"message": prompt, "session_id": "memory-session"},
+                )
+                self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(observed_histories[0], [])
+        self.assertEqual(
+            observed_histories[1][0].content,
+            "First question",
+        )
+        self.assertEqual(observed_histories[1][1].content, "Reply 1")
+        self.assertEqual(
+            memory.get_messages("memory-session")[-2].content, "Follow-up"
+        )
 
     def test_chat_endpoint_streams_search_activity(self):
         with patch(
