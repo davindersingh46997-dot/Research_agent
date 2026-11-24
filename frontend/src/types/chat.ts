@@ -24,3 +24,9 @@ export type ChatStreamEvent =
   | { type: 'activity'; activity: ChatActivity }
   | { type: 'done'; session_id: string; model: string }
   | { type: 'error'; detail: string };
+
+export interface HealthStatus {
+  status: string;
+  model: string;
+  tokenConfigured: boolean;
+}
