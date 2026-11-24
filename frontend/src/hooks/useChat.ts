@@ -60,12 +60,26 @@ export function useChat() {
         },
         controller.signal,
         setActivity,
+        (sources) => {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? { ...message, sources }
+                : message,
+            ),
+          );
+        },
       );
 
       setMessages((prev) =>
         prev.map((message) =>
           message.id === assistantId
-            ? { ...message, content: data.response, model: data.model }
+            ? {
+                ...message,
+                content: data.response,
+                model: data.model,
+                sources: data.sources || message.sources,
+              }
             : message,
         ),
       );

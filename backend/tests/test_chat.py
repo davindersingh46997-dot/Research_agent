@@ -10,7 +10,7 @@ from pydantic import SecretStr
 from backend.main import app
 from backend.core.config import Settings
 from backend.core.memory import ShortTermMemory
-from backend.models.chat_model import ChatActivity
+from backend.models.chat_model import ChatActivity, ChatSources
 from backend.services.search import SearchError, SearchSafetyError
 
 
@@ -186,6 +186,53 @@ class BackendChatTests(unittest.TestCase):
         self.assertEqual(events[-1]["type"], "done")
         self.assertTrue(events[-1]["session_id"])
         self.assertEqual(events[-1]["model"], "provider/free-model")
+
+    def test_chat_endpoint_streams_sources_event(self):
+        with patch(
+            "backend.api.chat.get_settings", return_value=self.settings
+        ), patch(
+            "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.is_research_question", return_value=True
+        ), patch(
+            "backend.api.chat.stream_chat_with_model",
+            return_value=self._stream_events(
+                [
+                    ChatActivity("searching"),
+                    ChatSources(
+                        sources=[
+                            {
+                                "title": "Example",
+                                "url": "https://example.com",
+                                "snippet": "A snippet",
+                            }
+                        ]
+                    ),
+                    "Answer.",
+                ]
+            ),
+        ):
+            response = self.client.post(
+                "/api/chat", json={"message": "What is quantum computing?"}
+            )
+
+        events = self._events(response)
+        self.assertEqual(events[0], {"type": "activity", "activity": "searching"})
+        self.assertEqual(
+            events[1],
+            {
+                "type": "sources",
+                "sources": [
+                    {
+                        "title": "Example",
+                        "url": "https://example.com",
+                        "snippet": "A snippet",
+                    }
+                ],
+            },
+        )
+        self.assertEqual(events[2], {"type": "chunk", "content": "Answer."})
+        self.assertEqual(events[-1]["type"], "done")
 
     def test_chat_endpoint_rejects_out_of_scope_question(self):
         with patch(

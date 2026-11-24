@@ -14,6 +14,7 @@ from backend.core.memory import ShortTermMemory
 from backend.guardrails.research_scope import is_research_question
 from backend.models.chat_model import (
     ChatActivity,
+    ChatSources,
     create_chat_model,
     stream_chat_with_model,
 )
@@ -38,6 +39,17 @@ class ChatStreamChunk(BaseModel):
 class ChatStreamActivity(BaseModel):
     type: Literal["activity"] = "activity"
     activity: Literal["planning", "searching", "thinking"]
+
+
+class SourceItem(BaseModel):
+    title: str
+    url: str
+    snippet: str = ""
+
+
+class ChatStreamSources(BaseModel):
+    type: Literal["sources"] = "sources"
+    sources: list[SourceItem]
 
 
 class ChatStreamComplete(BaseModel):
@@ -153,6 +165,19 @@ async def send_chat_message(request: ChatRequest) -> StreamingResponse:
                 if isinstance(event, ChatActivity):
                     yield _encode_event(
                         ChatStreamActivity(activity=event.activity)
+                    )
+                elif isinstance(event, ChatSources):
+                    yield _encode_event(
+                        ChatStreamSources(
+                            sources=[
+                                SourceItem(
+                                    title=s.get("title", ""),
+                                    url=s.get("url", ""),
+                                    snippet=s.get("snippet", ""),
+                                )
+                                for s in event.sources
+                            ]
+                        )
                     )
                 else:
                     response_parts.append(event)

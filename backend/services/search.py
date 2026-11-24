@@ -29,7 +29,7 @@ def search_with_tavily(query: str, model: TavilySearch | None = None) -> str:
             max_results=5,
             topic="general",
             include_answer=False,
-            include_raw_content="markdown",
+            include_raw_content=False,
             include_images=False,
             search_depth="basic",
         )
@@ -41,4 +41,19 @@ def search_with_tavily(query: str, model: TavilySearch | None = None) -> str:
         raise SearchError("Tavily returned an unsupported search result.")
     if "error" in result:
         raise SearchError("Tavily could not complete the search.")
+
+    # Strip raw_content to avoid context window bloating and truncate oversized snippets
+    if "results" in result and isinstance(result["results"], list):
+        cleaned_results = []
+        for item in result["results"]:
+            if isinstance(item, dict):
+                cleaned_item = {k: v for k, v in item.items() if k != "raw_content"}
+                if "content" in cleaned_item and isinstance(cleaned_item["content"], str):
+                    cleaned_item["content"] = cleaned_item["content"][:2000]
+                cleaned_results.append(cleaned_item)
+            else:
+                cleaned_results.append(item)
+        result = {k: v for k, v in result.items() if k != "results"}
+        result["results"] = cleaned_results
+
     return json.dumps(result, ensure_ascii=False)

@@ -3,6 +3,7 @@ import type {
   ChatRequest,
   ChatResponse,
   ChatStreamEvent,
+  SourceItem,
 } from '../types/chat';
 
 const API_BASE = '/api/chat';
@@ -39,6 +40,9 @@ function parseStreamEvent(frame: string): ChatStreamEvent | null {
   ) {
     return { type: 'activity', activity: event.activity };
   }
+  if (event.type === 'sources' && Array.isArray(event.sources)) {
+    return { type: 'sources', sources: event.sources as SourceItem[] };
+  }
   if (
     event.type === 'done' &&
     typeof event.session_id === 'string' &&
@@ -59,6 +63,7 @@ export async function streamChatMessage(
   onChunk?: (content: string) => void,
   signal?: AbortSignal,
   onActivity?: (activity: ChatActivity) => void,
+  onSources?: (sources: SourceItem[]) => void,
 ): Promise<ChatResponse> {
   const payload: ChatRequest = {
     message: message.trim(),
@@ -89,6 +94,7 @@ export async function streamChatMessage(
   const decoder = new TextDecoder();
   let buffer = '';
   let responseText = '';
+  let collectedSources: SourceItem[] = [];
   let completion: ChatResponse | null = null;
 
   const consumeFrame = (frame: string) => {
@@ -106,6 +112,9 @@ export async function streamChatMessage(
         throw new Error('Chat service sent activity after completing the response.');
       }
       onActivity?.(event.activity);
+    } else if (event.type === 'sources') {
+      collectedSources = [...collectedSources, ...event.sources];
+      onSources?.(collectedSources);
     } else if (event.type === 'error') {
       throw new Error(event.detail);
     } else {
@@ -116,6 +125,7 @@ export async function streamChatMessage(
         response: responseText,
         session_id: event.session_id,
         model: event.model,
+        sources: collectedSources.length > 0 ? collectedSources : undefined,
       };
     }
   };
@@ -148,7 +158,12 @@ export async function streamChatMessage(
   return completion;
 }
 
-export async function checkChatHealth(): Promise<{ status: string; model: string; tokenConfigured: boolean }> {
+export async function checkChatHealth(): Promise<{
+  status: string;
+  model: string;
+  tokenConfigured: boolean;
+  searchConfigured?: boolean;
+}> {
   const response = await fetch(`${API_BASE}/health`);
   if (!response.ok) {
     throw new Error('Chat service is unavailable');

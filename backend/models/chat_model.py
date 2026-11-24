@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import aclosing
 import re
+import json
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
@@ -42,6 +43,11 @@ _ACTION_CUES = re.compile(
 @dataclass(frozen=True)
 class ChatActivity:
     activity: Literal["planning", "searching", "thinking"]
+
+
+@dataclass(frozen=True)
+class ChatSources:
+    sources: list[dict[str, str]]
 
 
 class AgentState(MessagesState, total=False):
@@ -120,7 +126,7 @@ async def stream_chat_with_model(
     prompt: str,
     model: _ChatModel | None = None,
     history: Sequence[BaseMessage] = (),
-) -> AsyncIterator[str | ChatActivity]:
+) -> AsyncIterator[str | ChatActivity | ChatSources]:
     chat_model = model if model is not None else create_chat_model()
     if _requires_planning(prompt):
         yield ChatActivity("planning")
@@ -161,6 +167,31 @@ async def stream_chat_with_model(
                     has_tool_calls = False
 
                 if "tools" in data:
+                    tools_update = data["tools"]
+                    tool_messages = (
+                        tools_update.get("messages", [])
+                        if isinstance(tools_update, dict)
+                        else []
+                    )
+                    for t_msg in tool_messages:
+                        try:
+                            raw = _get_text(t_msg)
+                            if isinstance(raw, str):
+                                parsed = json.loads(raw)
+                                if isinstance(parsed, dict) and "results" in parsed:
+                                    sources = [
+                                        {
+                                            "title": str(item.get("title", "")),
+                                            "url": str(item.get("url", "")),
+                                            "snippet": str(item.get("content") or "")[:280],
+                                        }
+                                        for item in parsed["results"]
+                                        if isinstance(item, dict) and item.get("url")
+                                    ]
+                                    if sources:
+                                        yield ChatSources(sources=sources)
+                        except Exception:
+                            pass
                     yield ChatActivity("thinking")
 
                 if assistant_update is None:

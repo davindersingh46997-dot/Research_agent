@@ -1,3 +1,4 @@
+import asyncio
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -49,15 +50,20 @@ async def is_research_question(message: str) -> bool:
 
 async def is_search_content_safe(content: str) -> bool:
     guardrails = _get_search_content_guardrails()
-    for chunk in _search_content_chunks(content):
+    chunks = _search_content_chunks(content)
+    if not chunks:
+        return True
+
+    async def check_chunk(chunk: str) -> bool:
         serialized_chunk = json.dumps(chunk, ensure_ascii=False)
         result = await guardrails.check_async(
             [{"role": "user", "content": serialized_chunk}],
             rail_types=[RailType.INPUT],
         )
-        if result.status is not RailStatus.PASSED or result.content != serialized_chunk:
-            return False
-    return True
+        return result.status is RailStatus.PASSED and result.content == serialized_chunk
+
+    results = await asyncio.gather(*(check_chunk(chunk) for chunk in chunks))
+    return all(results)
 
 
 def is_search_content_safe_sync(content: str) -> bool:

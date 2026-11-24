@@ -29,13 +29,40 @@ class SearchServiceTests(unittest.TestCase):
             max_results=5,
             topic="general",
             include_answer=False,
-            include_raw_content="markdown",
+            include_raw_content=False,
             include_images=False,
             search_depth="basic",
         )
         mock_tavily.return_value.invoke.assert_called_once_with(
             {"query": "test query"}
         )
+
+    def test_search_strips_raw_content_if_present(self):
+        settings = Settings(
+            _env_file=None,
+            tavily_api_key=SecretStr("tavily-test-key"),
+        )
+        raw_results = {
+            "results": [
+                {
+                    "title": "Result",
+                    "url": "https://example.com",
+                    "content": "Short summary",
+                    "raw_content": "# Huge Markdown String With Boilerplate" * 100,
+                }
+            ]
+        }
+
+        with patch(
+            "backend.services.search.get_settings", return_value=settings
+        ), patch("backend.services.search.TavilySearch") as mock_tavily:
+            mock_tavily.return_value.invoke.return_value = raw_results
+
+            response = search_with_tavily("test query")
+
+        parsed = json.loads(response)
+        self.assertNotIn("raw_content", parsed["results"][0])
+        self.assertEqual(parsed["results"][0]["content"], "Short summary")
 
     def test_search_requires_configured_key(self):
         with patch(
