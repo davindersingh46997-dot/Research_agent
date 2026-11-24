@@ -18,8 +18,10 @@ class BackendChatTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         self.settings = Settings(
+            _env_file=None,
             openrouter_api_key=SecretStr("test-key"),
             openrouter_model="provider/free-model",
+            tavily_api_key=None,
         )
 
     @staticmethod
@@ -51,8 +53,21 @@ class BackendChatTests(unittest.TestCase):
                 "status": "healthy",
                 "model": "provider/free-model",
                 "tokenConfigured": True,
+                "searchConfigured": False,
             },
         )
+
+    def test_health_check_endpoint_with_tavily(self):
+        settings_with_tavily = Settings(
+            openrouter_api_key=SecretStr("test-key"),
+            openrouter_model="provider/free-model",
+            tavily_api_key=SecretStr("tavily-key"),
+        )
+        with patch("backend.api.chat.get_settings", return_value=settings_with_tavily):
+            response = self.client.get("/api/chat/health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["searchConfigured"])
 
     def test_chat_endpoint_returns_model_response_and_session(self):
         with patch(
@@ -338,6 +353,48 @@ class BackendChatTests(unittest.TestCase):
         self.assertEqual(events[0], {"type": "chunk", "content": "partial response"})
         self.assertEqual(events[1]["type"], "error")
         self.assertNotIn("done", [event["type"] for event in events])
+
+    def test_chat_endpoint_reports_unexpected_stream_exception(self):
+        class CrashingStream:
+            async def __aiter__(self):
+                raise RuntimeError("unexpected network disruption")
+                yield ""
+
+        with patch(
+            "backend.api.chat.get_settings", return_value=self.settings
+        ), patch(
+            "backend.api.chat.create_chat_model", return_value=object()
+        ), patch(
+            "backend.api.chat.is_research_question", return_value=True
+        ), patch(
+            "backend.api.chat.stream_chat_with_model", return_value=CrashingStream()
+        ):
+            response = self.client.post("/api/chat", json={"message": "Hello"})
+
+        events = self._events(response)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(events[0]["type"], "error")
+        self.assertIn("unexpected error", events[0]["detail"].lower())
+
+    def test_clear_session_endpoint(self):
+        response = self.client.delete("/api/chat/sessions/test-session-id")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"success": True, "session_id": "test-session-id"},
+        )
+
+    def test_cors_preflight_headers(self):
+        response = self.client.options(
+            "/api/chat",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "Content-Type",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access-control-allow-origin", response.headers)
 
 
 if __name__ == "__main__":

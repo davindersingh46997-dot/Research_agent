@@ -82,7 +82,20 @@ def chat_health() -> dict[str, str | bool]:
             settings.openrouter_api_key
             and settings.openrouter_api_key.get_secret_value().strip()
         ),
+        "searchConfigured": bool(
+            settings.tavily_api_key
+            and settings.tavily_api_key.get_secret_value().strip()
+        ),
     }
+
+
+@router.delete("/sessions/{session_id}")
+def clear_session(session_id: str) -> dict[str, str | bool]:
+    cleaned_id = session_id.strip()
+    if not cleaned_id:
+        raise HTTPException(status_code=400, detail="session_id cannot be empty.")
+    _chat_memory.clear(cleaned_id)
+    return {"success": True, "session_id": cleaned_id}
 
 
 @router.post("")
@@ -90,6 +103,11 @@ async def send_chat_message(request: ChatRequest) -> StreamingResponse:
     message = request.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
+    if len(message) > 20000:
+        raise HTTPException(
+            status_code=413,
+            detail="Message is too long. Please shorten your inquiry to under 20,000 characters.",
+        )
 
     settings = get_settings()
     if (
@@ -121,7 +139,7 @@ async def send_chat_message(request: ChatRequest) -> StreamingResponse:
         )
 
     chat_model = create_chat_model()
-    session_id = request.session_id or str(uuid4())
+    session_id = (request.session_id or "").strip() or str(uuid4())
     model_name = settings.openrouter_model.strip()
 
     async def stream_response() -> AsyncIterator[str]:
@@ -184,6 +202,14 @@ async def send_chat_message(request: ChatRequest) -> StreamingResponse:
             yield _encode_event(
                 ChatStreamError(
                     detail="OpenRouter returned an invalid response. Check the configured model and try again."
+                )
+            )
+            return
+        except Exception as exc:
+            logger.exception("Unexpected error in streaming response: %s", exc)
+            yield _encode_event(
+                ChatStreamError(
+                    detail="An unexpected error occurred while generating the response. Please try again."
                 )
             )
             return
