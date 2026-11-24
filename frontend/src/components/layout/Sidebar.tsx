@@ -1,4 +1,4 @@
-import { Bot, KeyRound, MessageSquare, MessageSquarePlus } from 'lucide-react';
+import { Bot, KeyRound, MessageSquare, Plus, ShieldCheck } from 'lucide-react';
 
 interface SidebarProps {
   onNewChat: () => void;
@@ -7,47 +7,70 @@ interface SidebarProps {
 export function Sidebar({ onNewChat }: SidebarProps) {
   return (
     <aside className="research-sidebar">
-      <a className="brand-lockup" href="#" aria-label="OpenRouter Chat">
-        <span className="brand-symbol">
-          <Bot size={20} strokeWidth={2} />
-        </span>
-        <span className="brand-name">
-          openchat<span> / router</span>
-        </span>
+      {/* Brand Header */}
+      <a className="brand-lockup" href="/" aria-label="Research Agent Home">
+        <div className="brand-symbol">
+          <Bot size={20} strokeWidth={2.2} />
+        </div>
+        <div className="brand-info">
+          <span className="brand-name">
+            Research<strong>Agent</strong>
+          </span>
+          <span className="brand-tag">OpenRouter · LangGraph</span>
+        </div>
       </a>
 
+      {/* New Research Button */}
       <button
         className="new-research-button"
         type="button"
         onClick={onNewChat}
+        title="Start a new research session"
       >
-        <MessageSquarePlus size={16} /> New chat
-        <span>⌘ N</span>
+        <Plus size={16} strokeWidth={2.5} />
+        <span>New Research</span>
+        <kbd className="shortcut-badge">⌘ N</kbd>
       </button>
 
       <div className="sidebar-rule" />
-      <p className="sidebar-label">WORKSPACE</p>
+
+      {/* Workspace Navigation */}
+      <div className="sidebar-section-header">
+        <span className="sidebar-label">ACTIVE WORKSPACE</span>
+      </div>
+
       <div className="workspace-item workspace-current">
-        <MessageSquare size={16} />
-        <span>OpenRouter Chat</span>
-        <span className="live-dot" />
+        <MessageSquare size={16} className="workspace-icon" />
+        <span className="workspace-title">Research Workspace</span>
+        <span className="live-beacon">
+          <span className="live-beacon-ring" />
+          <span className="live-beacon-core" />
+        </span>
       </div>
 
       <div className="sidebar-spacer" />
 
+      {/* Security & Routing Notice */}
       <div className="memory-notice">
         <div className="memory-icon">
-          <KeyRound size={15} />
+          <ShieldCheck size={16} />
         </div>
         <div>
-          <strong>API Key Routing</strong>
-          <p>Requests are routed through OpenRouter using the key configured in your root .env file.</p>
+          <div className="memory-title">
+            <strong>NeMo Guardrails Active</strong>
+          </div>
+          <p>
+            Prompts and web content are dynamically verified against prompt injection and jailbreaks.
+          </p>
         </div>
       </div>
 
+      {/* Footer Info */}
       <div className="sidebar-footer">
-        <span className="provider-dot" />
-        OpenRouter <span>·</span> Configured model
+        <div className="footer-status-pill">
+          <KeyRound size={12} className="footer-key-icon" />
+          <span>API Key Configured in .env</span>
+        </div>
       </div>
     </aside>
   );

@@ -1,4 +1,4 @@
-import { ListChecks, Loader2, Search } from 'lucide-react';
+import { Globe, ListChecks, Loader2 } from 'lucide-react';
 import type { ChatActivity } from '../../types/chat';
 
 interface ActivityIndicatorProps {
@@ -9,22 +9,22 @@ export function ActivityIndicator({ activity }: ActivityIndicatorProps) {
   const getActivityTitle = () => {
     switch (activity) {
       case 'planning':
-        return 'Planning your response...';
+        return 'Decomposing inquiry & building outline...';
       case 'searching':
-        return 'Searching the web...';
+        return 'Searching live web & verifying evidence...';
       default:
-        return 'Reasoning through your request...';
+        return 'Synthesizing evidence-grounded report...';
     }
   };
 
   const getActivityDescription = () => {
     switch (activity) {
       case 'planning':
-        return 'Organizing the steps for this complex request.';
+        return 'Structuring key sub-topics to ensure an exhaustive and rigorous analysis.';
       case 'searching':
-        return 'Finding current information to answer your question.';
+        return 'Querying Tavily for verified facts and checking against prompt injection.';
       default:
-        return 'Working through the response with your configured model.';
+        return 'Formulating comprehensive analysis and citing source references.';
     }
   };
 
@@ -36,19 +36,21 @@ export function ActivityIndicator({ activity }: ActivityIndicatorProps) {
     >
       <div className="working-icon">
         {activity === 'planning' ? (
-          <ListChecks size={17} />
+          <ListChecks size={18} />
         ) : activity === 'searching' ? (
-          <Search size={17} />
+          <Globe size={18} />
         ) : (
-          <Loader2 className="spin" size={17} />
+          <Loader2 className="spin" size={18} />
         )}
       </div>
-      <div>
+
+      <div className="working-details">
         <strong>{getActivityTitle()}</strong>
         <p>{getActivityDescription()}</p>
       </div>
+
       <div className="working-bars">
-        <i /><i /><i />
+        <i /><i /><i /><i />
       </div>
     </div>
   );

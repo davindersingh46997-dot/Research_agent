@@ -1,53 +1,66 @@
-import { ArrowUpRight, Sparkles } from 'lucide-react';
-import { DEFAULT_SUGGESTIONS, PIPELINE_STEPS } from '../../utils/constants';
+import { ArrowRight, Atom, Cpu, Dna, Sparkles, TrendingUp } from 'lucide-react';
 
 interface WelcomePanelProps {
   onSelectSuggestion: (prompt: string) => void;
 }
 
+const SUGGESTIONS = [
+  {
+    icon: Atom,
+    title: 'Quantum error correction',
+    query: 'Explain quantum computing and how fault-tolerant error correction works with practical examples.',
+  },
+  {
+    icon: TrendingUp,
+    title: 'Semiconductor supply chains',
+    query: 'Analyze the economic impact of semiconductor export restrictions on global supply chains.',
+  },
+  {
+    icon: Cpu,
+    title: 'Open weights vs frontier AI',
+    query: 'Compare the architecture, capabilities, and safety of open-weights models vs proprietary frontier models.',
+  },
+  {
+    icon: Dna,
+    title: 'CRISPR prime editing advances',
+    query: 'What are the most recent clinical breakthroughs in CRISPR and prime editing for genetic diseases?',
+  },
+] as const;
+
 export function WelcomePanel({ onSelectSuggestion }: WelcomePanelProps) {
   return (
-    <section className="welcome-panel">
-      <div className="welcome-kicker">
-        <Sparkles size={14} /> Open Source AI Chat
+    <div className="simple-welcome">
+      <div className="simple-welcome-icon">
+        <Sparkles size={24} strokeWidth={2.2} />
       </div>
-      <h1>
-        Direct chat pipeline<br />
-        <span>powered by OpenRouter.</span>
+
+      <h1 className="simple-welcome-title">
+        Where would you like to start?
       </h1>
-      <p className="welcome-description">
-        Send requests from the chat composer below directly to an open-source model.
-        Responses from your configured OpenRouter model appear in the chat thread.
+
+      <p className="simple-welcome-subtitle">
+        Ask complex questions across science, technology, economics, or public policy.
       </p>
 
-      <div className="pipeline-strip" aria-label="Pipeline Architecture">
-        {PIPELINE_STEPS.map((item, idx) => (
-          <div key={item.step} style={{ display: 'contents' }}>
-            <div>
-              <span className="pipeline-number">{item.step}</span>
-              <strong>{item.title}</strong>
-              <small>{item.subtitle}</small>
-            </div>
-            {idx < PIPELINE_STEPS.length - 1 && <span className="pipeline-connector" />}
-          </div>
-        ))}
-      </div>
-
-      <div className="suggestion-block">
-        <p className="suggestion-label">TRY A STARTER PROMPT</p>
-        <div className="suggestion-list">
-          {DEFAULT_SUGGESTIONS.map((suggestion) => (
+      <div className="simple-suggestions">
+        {SUGGESTIONS.map((item) => {
+          const Icon = item.icon;
+          return (
             <button
-              key={suggestion}
+              key={item.title}
               type="button"
-              onClick={() => onSelectSuggestion(suggestion)}
+              className="simple-chip"
+              onClick={() => onSelectSuggestion(item.query)}
             >
-              <span>{suggestion}</span>
-              <ArrowUpRight size={15} />
+              <div className="simple-chip-icon-box">
+                <Icon size={16} />
+              </div>
+              <span className="simple-chip-text">{item.title}</span>
+              <ArrowRight size={14} className="simple-chip-arrow" />
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
-    </section>
+    </div>
   );
 }

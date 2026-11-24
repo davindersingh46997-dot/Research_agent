@@ -1,11 +1,6 @@
 export const DEFAULT_SUGGESTIONS = [
-  'Explain quantum computing in simple terms with an example',
-  'Analyze the economic impact of semiconductor export restrictions',
-  'Compare open weights vs proprietary language models',
-] as const;
-
-export const PIPELINE_STEPS = [
-  { step: '01', title: 'Frontend UI', subtitle: 'Chat area input' },
-  { step: '02', title: 'Routing', subtitle: 'FastAPI / Vite proxy' },
-  { step: '03', title: 'OpenRouter', subtitle: 'Configured model' },
+  'Explain quantum computing and fault-tolerant error correction with practical examples.',
+  'Analyze the economic impact of semiconductor export restrictions on global supply chains.',
+  'Compare the architecture, capabilities, and safety of open-weights models vs proprietary models.',
+  'What are the most recent clinical breakthroughs in CRISPR and prime editing for genetic diseases?',
 ] as const;
